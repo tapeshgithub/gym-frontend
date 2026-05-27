@@ -13,34 +13,32 @@ const emptyForm = { planId: null, planName: '', durationMonths: '', price: '' };
 const extractPlans = (data) => {
   try {
     const safe = JSON.parse(JSON.stringify(data));
-    const arr = Array.isArray(safe) ? safe : (safe ? [safe] : []);
+    const arr  = Array.isArray(safe) ? safe : (safe ? [safe] : []);
     return arr.map(p => ({
-      planId: p.planId,
-      planName: p.planName || '',
+      planId:         p.planId,
+      planName:       p.planName       || '',
       durationMonths: p.durationMonths || 0,
-      price: p.price || 0,
+      price:          Number(p.price)  || 0,
     }));
-  } catch (e) {
-    return [];
-  }
+  } catch { return []; }
 };
 
 const COLORS = [
-  { bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.2)', accent: '#06b6d4' },
-  { bg: 'rgba(170,255,0,0.08)', border: 'rgba(170,255,0,0.2)', accent: '#aaff00' },
-  { bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)', accent: '#a78bfa' },
-  { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)', accent: '#f59e0b' },
+  { bg: 'rgba(6,182,212,0.08)',   border: 'rgba(6,182,212,0.2)',   accent: '#06b6d4' },
+  { bg: 'rgba(170,255,0,0.08)',   border: 'rgba(170,255,0,0.2)',   accent: '#aaff00' },
+  { bg: 'rgba(124,58,237,0.08)',  border: 'rgba(124,58,237,0.2)',  accent: '#a78bfa' },
+  { bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)',  accent: '#f59e0b' },
   { bg: 'rgba(255,107,157,0.08)', border: 'rgba(255,107,157,0.2)', accent: '#ff6b9d' },
 ];
 
 const Plans = () => {
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [plans, setPlans]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState('');
+  const [modalOpen, setModalOpen]   = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: '' });
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
+  const [form, setForm]             = useState(emptyForm);
+  const [saving, setSaving]         = useState(false);
   const isEdit = !!form.planId;
 
   const fetchPlans = async () => {
@@ -60,9 +58,14 @@ const Plans = () => {
     p.planName?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openAdd = () => { setForm(emptyForm); setModalOpen(true); };
+  const openAdd  = () => { setForm(emptyForm); setModalOpen(true); };
   const openEdit = (p) => {
-    setForm({ planId: p.planId, planName: p.planName, durationMonths: p.durationMonths, price: p.price });
+    setForm({
+      planId:         p.planId,
+      planName:       p.planName,
+      durationMonths: p.durationMonths,
+      price:          p.price,
+    });
     setModalOpen(true);
   };
 
@@ -73,12 +76,28 @@ const Plans = () => {
     }
     setSaving(true);
     try {
-      const payload = { ...form, durationMonths: Number(form.durationMonths), price: Number(form.price) };
-      if (isEdit) { await planService.update(payload); toast.success('Plan updated'); }
-      else { await planService.save(payload); toast.success('Plan created'); }
+      // Send exactly what backend Plan model expects:
+      // planId (Long), planName (String), durationMonths (Integer), price (BigDecimal)
+      // JSON numbers are fine for BigDecimal - Spring Boot handles it
+      const payload = {
+        planName:       form.planName,
+        durationMonths: Number(form.durationMonths),
+        price:          Number(form.price),
+      };
+      if (isEdit) {
+        payload.planId = form.planId;
+        await planService.update(payload);
+        toast.success('Plan updated');
+      } else {
+        await planService.save(payload);
+        toast.success('Plan created');
+      }
       setModalOpen(false);
       fetchPlans();
-    } catch { toast.error('Failed to save plan'); }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.response?.data || err.message || 'Unknown error';
+      toast.error('Failed to save plan: ' + msg);
+    }
     setSaving(false);
   };
 
@@ -88,7 +107,9 @@ const Plans = () => {
       toast.success('Plan deleted');
       setDeleteModal({ open: false, id: null, name: '' });
       fetchPlans();
-    } catch { toast.error('Failed to delete plan'); }
+    } catch {
+      toast.error('Failed to delete plan');
+    }
   };
 
   return (
@@ -110,9 +131,7 @@ const Plans = () => {
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-          {[1,2,3].map(i => (
-            <div key={i} style={{ height: 220, borderRadius: 16, background: 'rgba(37,37,64,0.5)', animation: 'pulse 2s infinite' }} />
-          ))}
+          {[1,2,3].map(i => <div key={i} style={{ height: 220, borderRadius: 16, background: 'rgba(37,37,64,0.5)' }} />)}
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState title={search ? 'No plans found' : 'No plans yet'} message="Create your first plan to get started" />
@@ -131,7 +150,6 @@ const Plans = () => {
                     borderRadius: 16, padding: 20,
                     display: 'flex', flexDirection: 'column',
                     boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
                   }}
                   whileHover={{ y: -4 }}
                 >
@@ -177,8 +195,7 @@ const Plans = () => {
                       ₹{Math.round(plan.price / (plan.durationMonths || 1)).toLocaleString('en-IN')} per month
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#a0a0b8' }}>
-                      <RiCheckLine size={14} color={c.accent} />
-                      Full gym access
+                      <RiCheckLine size={14} color={c.accent} />Full gym access
                     </div>
                   </div>
 
@@ -203,7 +220,7 @@ const Plans = () => {
               <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#6e6e8a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{label}</label>
               <input
                 type={type} value={form[key]} placeholder={placeholder}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                onChange={e => setForm({ ...form, [key]: e.target.value })}
                 min={type === 'number' ? '0' : undefined}
                 style={{
                   width: '100%', padding: '10px 14px', borderRadius: 12,

@@ -16,37 +16,33 @@ const extractMembers = (data) => {
     const arr = Array.isArray(data) ? data : (data ? [data] : []);
     return arr.map(m => ({
       memberId: m.memberId,
-      name: m.name || '',
-      email: m.email || '',
-      phone: m.phone || '',
+      name:     m.name     || '',
+      email:    m.email    || '',
+      phone:    m.phone    || '',
       joinDate: m.joinDate || '',
     }));
   } catch (e) {
-    console.error('extractMembers error:', e);
     return [];
   }
 };
 
 const Members = () => {
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [members, setMembers]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState('');
+  const [modalOpen, setModalOpen]   = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: '' });
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
+  const [form, setForm]             = useState(emptyForm);
+  const [saving, setSaving]         = useState(false);
   const isEdit = !!form.memberId;
 
   const fetchMembers = async () => {
     setLoading(true);
     try {
-      const res = await memberService.getAll();
-      const raw = res.data;
-      // Stringify then parse to break circular references
-      const safe = JSON.parse(JSON.stringify(raw));
+      const res  = await memberService.getAll();
+      const safe = JSON.parse(JSON.stringify(res.data));
       setMembers(extractMembers(safe));
     } catch (err) {
-      console.error('fetchMembers error:', err);
       toast.error('Failed to load members');
     }
     setLoading(false);
@@ -54,20 +50,31 @@ const Members = () => {
 
   useEffect(() => { fetchMembers(); }, []);
 
-  const filtered = members.filter((m) =>
+  const filtered = members.filter(m =>
     m.name?.toLowerCase().includes(search.toLowerCase()) ||
     m.email?.toLowerCase().includes(search.toLowerCase()) ||
     m.phone?.includes(search)
   );
 
-  const openAdd = () => { setForm(emptyForm); setModalOpen(true); };
+  const openAdd  = () => { setForm(emptyForm); setModalOpen(true); };
   const openEdit = (m) => {
+    // joinDate from backend can be "2026-05-05" or ["2026", "5", "5"] array
+    let jd = '';
+    if (m.joinDate) {
+      if (Array.isArray(m.joinDate)) {
+        // Spring sometimes returns date as [year, month, day] array
+        const [y, mo, d] = m.joinDate;
+        jd = `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      } else {
+        jd = String(m.joinDate).split('T')[0];
+      }
+    }
     setForm({
       memberId: m.memberId,
-      name: m.name || '',
-      phone: m.phone || '',
-      email: m.email || '',
-      joinDate: m.joinDate ? m.joinDate.split('T')[0] : '',
+      name:     m.name  || '',
+      phone:    m.phone || '',
+      email:    m.email || '',
+      joinDate: jd,
     });
     setModalOpen(true);
   };
@@ -77,17 +84,28 @@ const Members = () => {
     if (!form.name || !form.email) { toast.error('Name and email are required'); return; }
     setSaving(true);
     try {
+      // Build payload - always send joinDate as "YYYY-MM-DD" string
+      // Spring Boot with LocalDate will parse it correctly
+      const payload = {
+        name:     form.name,
+        phone:    form.phone,
+        email:    form.email,
+        joinDate: form.joinDate || null,
+      };
+
       if (isEdit) {
-        await memberService.update(form);
+        payload.memberId = form.memberId;
+        await memberService.update(payload);
         toast.success('Member updated');
       } else {
-        await memberService.save(form);
+        await memberService.save(payload);
         toast.success('Member added');
       }
       setModalOpen(false);
       fetchMembers();
     } catch (err) {
-      toast.error('Failed to save: ' + (err.response?.data?.message || err.message));
+      const msg = err.response?.data?.message || err.response?.data || err.message || 'Unknown error';
+      toast.error('Failed to save: ' + msg);
     }
     setSaving(false);
   };
@@ -98,7 +116,7 @@ const Members = () => {
       toast.success('Member deleted');
       setDeleteModal({ open: false, id: null, name: '' });
       fetchMembers();
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete');
     }
   };
@@ -106,14 +124,12 @@ const Members = () => {
   const cardStyle = {
     background: 'rgba(22,22,46,0.7)',
     border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: 16,
-    overflow: 'hidden',
+    borderRadius: 16, overflow: 'hidden',
     boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Header */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <SearchInput value={search} onChange={setSearch} placeholder="Search members…" />
@@ -129,15 +145,10 @@ const Members = () => {
         </button>
       </div>
 
-      {/* Table Card */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={cardStyle}>
-        <div style={{
-          padding: '16px 20px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-        }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#a0a0b8' }}>
-            All Members{' '}
-            <span style={{ color: '#4a4a6a', fontFamily: 'monospace' }}>({filtered.length})</span>
+            All Members <span style={{ color: '#4a4a6a', fontFamily: 'monospace' }}>({filtered.length})</span>
           </span>
         </div>
 
@@ -150,16 +161,13 @@ const Members = () => {
                     padding: '12px 16px', textAlign: 'left', fontSize: 11,
                     letterSpacing: '0.08em', textTransform: 'uppercase',
                     color: '#6e6e8a', fontWeight: 600,
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
-                    whiteSpace: 'nowrap',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap',
                   }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <TableSkeleton rows={5} />
-              ) : (
+              {loading ? <TableSkeleton rows={5} /> : (
                 filtered.map((m, idx) => (
                   <tr key={m.memberId}
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.15s' }}
@@ -174,44 +182,38 @@ const Members = () => {
                           background: 'rgba(170,255,0,0.1)', border: '1px solid rgba(170,255,0,0.2)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 12, fontWeight: 700, color: '#aaff00', flexShrink: 0,
-                        }}>
-                          {m.name?.charAt(0)?.toUpperCase() || '?'}
-                        </div>
+                        }}>{m.name?.charAt(0)?.toUpperCase() || '?'}</div>
                         <span style={{ color: '#fff', fontWeight: 500, fontSize: 14 }}>{m.name}</span>
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px', color: '#a0a0b8', fontSize: 13 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <RiMailLine size={13} />{m.email}
-                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><RiMailLine size={13} />{m.email}</div>
                     </td>
                     <td style={{ padding: '14px 16px', color: '#a0a0b8', fontSize: 13 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <RiPhoneLine size={13} />{m.phone || '—'}
-                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><RiPhoneLine size={13} />{m.phone || '—'}</div>
                     </td>
                     <td style={{ padding: '14px 16px', color: '#a0a0b8', fontSize: 13 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <RiCalendarLine size={13} />
-                        {m.joinDate ? m.joinDate.split('T')[0] : '—'}
+                        {Array.isArray(m.joinDate)
+                          ? `${m.joinDate[0]}-${String(m.joinDate[1]).padStart(2,'0')}-${String(m.joinDate[2]).padStart(2,'0')}`
+                          : m.joinDate ? String(m.joinDate).split('T')[0] : '—'}
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={() => openEdit(m)} style={{
-                          width: 32, height: 32, borderRadius: 8,
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          background: 'rgba(255,255,255,0.04)', cursor: 'pointer',
-                          color: '#a0a0b8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)',
+                          background: 'rgba(255,255,255,0.04)', cursor: 'pointer', color: '#a0a0b8',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
                           onMouseEnter={e => e.currentTarget.style.color = '#aaff00'}
                           onMouseLeave={e => e.currentTarget.style.color = '#a0a0b8'}
                         ><RiEditLine size={14} /></button>
                         <button onClick={() => setDeleteModal({ open: true, id: m.memberId, name: m.name })} style={{
-                          width: 32, height: 32, borderRadius: 8,
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          background: 'rgba(255,255,255,0.04)', cursor: 'pointer',
-                          color: '#a0a0b8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)',
+                          background: 'rgba(255,255,255,0.04)', cursor: 'pointer', color: '#a0a0b8',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
                           onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
                           onMouseLeave={e => e.currentTarget.style.color = '#a0a0b8'}
@@ -232,7 +234,6 @@ const Members = () => {
         </div>
       </motion.div>
 
-      {/* Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={isEdit ? 'Edit Member' : 'Add New Member'}>
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {[
@@ -244,15 +245,12 @@ const Members = () => {
             <div key={key}>
               <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#6e6e8a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{label}</label>
               <input
-                type={type}
-                value={form[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                placeholder={placeholder}
+                type={type} value={form[key]} placeholder={placeholder}
+                onChange={e => setForm({ ...form, [key]: e.target.value })}
                 style={{
                   width: '100%', padding: '10px 14px', borderRadius: 12,
                   background: 'rgba(7,7,15,0.8)', border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#e8e8ed', fontSize: 14, outline: 'none',
-                  boxSizing: 'border-box',
+                  color: '#e8e8ed', fontSize: 14, outline: 'none', boxSizing: 'border-box',
                 }}
                 onFocus={e => e.target.style.borderColor = '#aaff00'}
                 onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
